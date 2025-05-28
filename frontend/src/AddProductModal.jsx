@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { addProduct } from "./services/adminService";
 
 export default function AddProductModal({ token, onClose }) {
   const [formData, setFormData] = useState({
@@ -36,25 +37,7 @@ export default function AddProductModal({ token, onClose }) {
     setLoadingAdd(true);
 
     try {
-      const res = await fetch("/onlineShop/api/admin/addProduct", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name,
-          price: parseFloat(price),
-          quantity: parseInt(quantity, 10),
-          description,
-          imageUrl,
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || "Failed to add product");
-      }
+      await addProduct({ name, price, quantity, description, imageUrl });
 
       setSuccess("Product added successfully!");
       setFormData({

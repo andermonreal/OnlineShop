@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from "react";
+import { deleteProduct } from "./services/adminService"; 
+import { fetchProducts } from "./services/productService";
 
 export default function DeleteProductModal({ token, onClose }) {
   const [products, setProducts] = useState([]);
@@ -7,14 +9,10 @@ export default function DeleteProductModal({ token, onClose }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchProducts = async () => {
+    const loadProducts = async () => {
       setLoadingProducts(true);
       try {
-        const res = await fetch("/onlineShop/api/products/", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("Failed to fetch products");
-        const data = await res.json();
+        const data = await fetchProducts();
         setProducts(data || []);
       } catch (err) {
         setError(err.message);
@@ -23,8 +21,8 @@ export default function DeleteProductModal({ token, onClose }) {
       }
     };
 
-    fetchProducts();
-  }, [token]);
+    loadProducts();
+  }, []);
 
   const handleDelete = async (productId) => {
     if (!window.confirm("Are you sure you want to delete this product?")) return;
@@ -33,16 +31,7 @@ export default function DeleteProductModal({ token, onClose }) {
     setError("");
 
     try {
-      const res = await fetch(`/onlineShop/api/admin/${productId}/delProduct`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || "Failed to delete product");
-      }
-
+      await deleteProduct(productId);
       setProducts((prev) => prev.filter((p) => p.id !== productId));
     } catch (err) {
       setError(err.message);

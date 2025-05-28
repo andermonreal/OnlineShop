@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { getUserRoles } from "./services/userService";
+
 import AddProductModal from "./AddProductModal";
 import DeleteProductModal from "./DeleteProductModal";
 import ViewUsersModal from "./ViewUsersModal";
@@ -16,26 +18,24 @@ export default function Admin() {
   const token = localStorage.getItem("token");
 
   useEffect(() => {
-    const fetchRoles = async () => {
+    const loadRoles = async () => {
       if (!token) {
-        setLoadingRoles(false);
         setRoles([]);
+        setLoadingRoles(false);
         return;
       }
+
       try {
-        const res = await fetch("/onlineShop/api/users/role", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error("Unauthorized");
-        const data = await res.json();
-        setRoles(data.roles || []);
+        const roles = await getUserRoles();
+        setRoles(roles);
       } catch {
         setRoles([]);
       } finally {
         setLoadingRoles(false);
       }
     };
-    fetchRoles();
+
+    loadRoles();
   }, [token]);
 
   const handleBack = () => {

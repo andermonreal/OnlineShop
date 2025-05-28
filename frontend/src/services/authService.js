@@ -1,31 +1,21 @@
-const API_BASE = "/onlineShop/api";
+import { apiFetch } from "./api";
 
 export async function login(email, password) {
-  const response = await fetch("/onlineShop/api/users/login", {
+  const data = await apiFetch("/users/login", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
+    headers: { "Content-Type": "application/json" },
   });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || "Login failed");
-  }
-
-  const data = await response.json();
 
   return data;
 }
 
 export async function register(userData) {
-  const response = await fetch(`${API_BASE}/users/register`, {
+  const data = await apiFetch("/users/register", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(userData),
+    headers: { "Content-Type": "application/json" },
   });
-
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "Registration failed");
 
   return {
     token: data.token,
@@ -39,9 +29,10 @@ export function logout() {
 }
 
 export function getCurrentUser() {
-  return JSON.parse(localStorage.getItem("user"));
+  const user = localStorage.getItem("user");
+  return user ? JSON.parse(user) : null;
 }
 
 export function isAuthenticated() {
-  return !!localStorage.getItem("token");
+  return Boolean(localStorage.getItem("token"));
 }

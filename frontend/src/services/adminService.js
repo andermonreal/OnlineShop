@@ -20,3 +20,20 @@ export const changeUserPassword = async (userId, newPassword) => {
     body: JSON.stringify({ newPassword }),
   });
 };
+
+export const addProduct = async (productData) => {
+  return apiFetch("/admin/addProduct", {
+    method: "POST",
+    body: JSON.stringify({
+      ...productData,
+      price: parseFloat(productData.price),
+      quantity: parseInt(productData.quantity, 10),
+    }),
+  });
+};
+
+export const deleteProduct = async (productId) => {
+  return apiFetch(`/admin/${productId}/delProduct`, {
+    method: "DELETE",
+  });
+};
