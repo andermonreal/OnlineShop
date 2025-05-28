@@ -1,0 +1,39 @@
+# === Global ===
+.DS_Store
+Thumbs.db
+*.log
+
+# === Node / React (frontend) ===
+frontend/node_modules/
+frontend/.env
+frontend/.env.local
+frontend/build/
+frontend/.next/
+frontend/.cache/
+
+# === Java / NetBeans / Maven (backend) ===
+backend/target/
+backend/.idea/
+backend/.classpath
+backend/.project
+backend/.settings/
+backend/*.iml
+
+# === Payara / GlassFish ===
+payara/glassfish/domains/*/logs/
+payara/glassfish/domains/*/generated/
+payara/glassfish/domains/*/applications/
+payara/glassfish/domains/*/osgi-cache/
+payara/glassfish/domains/*/docroot/
+payara/glassfish/domains/*/config/*.log
+payara/glassfish/domains/*/autodeploy/*.log
+
+# === VSCode and IDEs ===
+.vscode/
+*.swp
+*.swo
+
+# === Scripts cache or tmp ===
+scripts/*.tmp
+scripts/*.bak
+/pscShop/target/
