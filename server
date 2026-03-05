@@ -1,0 +1,439 @@
+#!/usr/bin/env bash
+# ════════════════════════════════════════════════════════════════════════════
+#  server — OnlineShop unified service manager
+#
+#  USAGE:
+#    ./server start    — start DB + Payara + build + deploy + frontend
+#    ./server stop     — stop all services
+#    ./server restart  — stop then start everything
+#    ./server redeploy — rebuild WAR and redeploy only (no restart)
+#    ./server status   — show what is running
+# ════════════════════════════════════════════════════════════════════════════
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PAYARA_DOWNLOAD_URL="https://nexus.payara.fish/repository/payara-community/fish/payara/distributions/payara/6.2025.3/payara-6.2025.3.zip"
+
+# ── Colors ────────────────────────────────────────────────────────────────────
+RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'
+YELLOW='\033[0;33m'; BOLD='\033[1m'; RESET='\033[0m'
+
+log()  { echo -e "${CYAN}▶  $*${RESET}"; }
+ok()   { echo -e "${GREEN}✔  $*${RESET}"; }
+warn() { echo -e "${YELLOW}⚠  $*${RESET}"; }
+err()  { echo -e "${RED}✖  $*${RESET}"; exit 1; }
+sep()  { echo -e "${CYAN}────────────────────────────────────────────────${RESET}"; }
+
+# ── Load .env ─────────────────────────────────────────────────────────────────
+load_env() {
+    if [ ! -f "$SCRIPT_DIR/.env" ]; then
+        echo ""
+        err "Configuration file '.env' not found in $SCRIPT_DIR
+
+    The project requires a .env file with all configuration.
+    Copy the provided .env.example and fill in your values:
+
+      cp .env.example .env
+      nano .env"
+    fi
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+}
+
+# ── Validate required config ───────────────────────────────────────────────────
+validate_config() {
+    local missing=0
+
+    # PAYARA_HOME
+    if [ -z "$PAYARA_HOME" ]; then
+        echo -e "${RED}✖  PAYARA_HOME is not set in .env${RESET}"
+        echo "   Add this line to your .env file:"
+        echo "   PAYARA_HOME=/path/to/your/payara6"
+        missing=1
+    elif [ ! -d "$PAYARA_HOME" ]; then
+        echo ""
+        echo -e "${RED}✖  Payara directory not found: $PAYARA_HOME${RESET}"
+        echo ""
+        echo "   The path set in PAYARA_HOME does not exist on this machine."
+        echo "   Make sure PAYARA_HOME in your .env points to the correct location."
+        echo ""
+        echo "   If you haven't installed Payara yet, download version 6.2025.3 from:"
+        echo -e "   ${BOLD}${PAYARA_DOWNLOAD_URL}${RESET}"
+        echo ""
+        echo "   Quick install:"
+        echo "     wget '$PAYARA_DOWNLOAD_URL'"
+        echo "     unzip payara-6.2025.3.zip -d ~/"
+        echo "   Then set in .env:  PAYARA_HOME=\$HOME/payara6"
+        missing=1
+    elif [ ! -x "$PAYARA_HOME/bin/asadmin" ]; then
+        echo -e "${RED}✖  asadmin not found inside PAYARA_HOME: $PAYARA_HOME/bin/asadmin${RESET}"
+        echo "   Your PAYARA_HOME points to a directory that does not look like a valid"
+        echo "   Payara installation (missing bin/asadmin)."
+        echo "   Expected structure: $PAYARA_HOME/bin/asadmin"
+        missing=1
+    fi
+
+    # Database
+    if [ -z "$POSTGRES_DB" ] || [ -z "$POSTGRES_USER" ] || [ -z "$POSTGRES_PASSWORD" ]; then
+        echo -e "${RED}✖  Database configuration incomplete in .env${RESET}"
+        echo "   Required variables: POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD"
+        missing=1
+    fi
+
+    # Backend dir
+    if [ ! -f "$SCRIPT_DIR/backend/pom.xml" ]; then
+        echo -e "${RED}✖  Backend not found at $SCRIPT_DIR/backend/pom.xml${RESET}"
+        echo "   Make sure this script is in the project root directory,"
+        echo "   alongside the 'backend/' folder."
+        missing=1
+    fi
+
+    # Frontend dir
+    if [ ! -f "$SCRIPT_DIR/frontend/package.json" ]; then
+        echo -e "${RED}✖  Frontend not found at $SCRIPT_DIR/frontend/package.json${RESET}"
+        echo "   Make sure this script is in the project root directory,"
+        echo "   alongside the 'frontend/' folder."
+        missing=1
+    fi
+
+    # Docker
+    if ! command -v docker &>/dev/null; then
+        echo -e "${RED}✖  Docker is not installed or not in PATH${RESET}"
+        echo "   Docker is required to run PostgreSQL."
+        echo "   Install it from: https://docs.docker.com/engine/install/"
+        missing=1
+    fi
+
+    # Maven
+    if ! command -v mvn &>/dev/null; then
+        echo -e "${RED}✖  Maven (mvn) is not installed or not in PATH${RESET}"
+        echo "   Maven is required to build the backend WAR."
+        echo "   Install it with your package manager, e.g.:"
+        echo "     Ubuntu/Debian:  sudo apt install maven"
+        echo "     macOS:          brew install maven"
+        missing=1
+    fi
+
+    # Node
+    if ! command -v node &>/dev/null; then
+        echo -e "${RED}✖  Node.js is not installed or not in PATH${RESET}"
+        echo "   Node.js is required to run the frontend."
+        echo "   Download from: https://nodejs.org/en/download"
+        missing=1
+    fi
+
+    if [ $missing -ne 0 ]; then
+        echo ""
+        err "Fix the issues above and run ./server start again."
+    fi
+}
+
+# ── Derived vars (set after load_env + validate_config) ──────────────────────
+setup_vars() {
+    ASADMIN="$PAYARA_HOME/bin/asadmin"
+    ADMIN_PORT="${PAYARA_ADMIN_PORT:-4848}"
+    FRONTEND_PORT="${FRONTEND_PORT:-80}"
+    DB_POOL="PostgresPool"
+    DB_RESOURCE="jdbc/postgres"
+    APP_NAME="onlineShop"
+}
+
+# ── Port check helper ─────────────────────────────────────────────────────────
+port_open() {
+    nc -z localhost "$1" 2>/dev/null
+}
+
+wait_for_port() {
+    local port=$1 label=$2
+    local attempts=0 max=30
+    log "Waiting for $label (port $port)..."
+    while ! port_open "$port"; do
+        attempts=$((attempts + 1))
+        if [ $attempts -ge $max ]; then
+            err "$label did not become available on port $port after 60s.
+   Check the service logs for errors."
+        fi
+        sleep 2
+    done
+    sleep 1
+    ok "$label is ready"
+}
+
+# ── Docker database ───────────────────────────────────────────────────────────
+start_database() {
+    if docker ps 2>/dev/null | grep -q "postgres"; then
+        ok "PostgreSQL already running"
+        return
+    fi
+
+    if [ ! -f "$SCRIPT_DIR/database/docker-compose.yaml" ] && [ ! -f "$SCRIPT_DIR/database/docker-compose.yml" ]; then
+        err "Docker Compose file not found at $SCRIPT_DIR/database/docker-compose.yaml
+   Make sure the 'database/' folder exists in the project root."
+    fi
+
+    log "Starting PostgreSQL via Docker Compose..."
+    cd "$SCRIPT_DIR"
+    docker-compose --env-file .env -f database/docker-compose.yaml up --build -d 2>/dev/null \
+        || docker compose  --env-file .env -f database/docker-compose.yaml up --build -d 2>/dev/null \
+        || err "docker-compose failed. Make sure Docker Desktop / Docker Engine is running."
+
+    wait_for_port "${POSTGRES_PORT:-5432}" "PostgreSQL"
+}
+
+stop_database() {
+    log "Stopping PostgreSQL..."
+    cd "$SCRIPT_DIR"
+    docker-compose --env-file .env -f database/docker-compose.yaml down 2>/dev/null \
+        || docker compose  --env-file .env -f database/docker-compose.yaml down 2>/dev/null \
+        || warn "Could not stop Docker Compose (may already be stopped)"
+}
+
+# ── Payara ────────────────────────────────────────────────────────────────────
+start_payara() {
+    if port_open "$ADMIN_PORT"; then
+        ok "Payara already running"
+        return
+    fi
+
+    log "Starting Payara domain..."
+    "$ASADMIN" start-domain domain1 \
+        || err "Payara failed to start. Check Payara logs at:
+   $PAYARA_HOME/glassfish/domains/domain1/logs/server.log"
+
+    wait_for_port "$ADMIN_PORT" "Payara admin console"
+}
+
+stop_payara() {
+    log "Stopping Payara..."
+    "$ASADMIN" stop-domain domain1 2>/dev/null || warn "Payara was not running"
+}
+
+# ── JDBC pool & resource (idempotent) ────────────────────────────────────────
+setup_jdbc() {
+    if "$ASADMIN" list-jdbc-connection-pools 2>/dev/null | grep -q "$DB_POOL"; then
+        ok "JDBC connection pool '$DB_POOL' already exists"
+    else
+        log "Creating JDBC connection pool..."
+        "$ASADMIN" create-jdbc-connection-pool \
+            --datasourceclassname org.postgresql.ds.PGSimpleDataSource \
+            --restype javax.sql.DataSource \
+            --property "user=${POSTGRES_USER}:password=${POSTGRES_PASSWORD}:serverName=${POSTGRES_HOST}:portNumber=${POSTGRES_PORT}:databaseName=${POSTGRES_DB}" \
+            "$DB_POOL" \
+            || err "Failed to create JDBC connection pool.
+   Verify your database credentials in .env and that PostgreSQL is running."
+        ok "JDBC connection pool created"
+    fi
+
+    if "$ASADMIN" list-jdbc-resources 2>/dev/null | grep -q "$DB_RESOURCE"; then
+        ok "JDBC resource '$DB_RESOURCE' already exists"
+    else
+        log "Creating JDBC resource '$DB_RESOURCE'..."
+        "$ASADMIN" create-jdbc-resource \
+            --connectionpoolid "$DB_POOL" \
+            "$DB_RESOURCE" \
+            || err "Failed to create JDBC resource '$DB_RESOURCE'."
+        ok "JDBC resource created"
+    fi
+}
+
+# ── Build WAR ─────────────────────────────────────────────────────────────────
+build_war() {
+    log "Building backend WAR with Maven..."
+    cd "$SCRIPT_DIR/backend"
+    mvn clean package -q -DskipTests \
+        || err "Maven build failed. Run 'mvn clean package' manually in backend/
+   to see the full error output."
+    WAR_FILE=$(find target -name "*.war" | head -1)
+    [ -n "$WAR_FILE" ] \
+        || err "No .war file found in backend/target/ after Maven build.
+   Check your pom.xml packaging configuration."
+    ok "Built: backend/$WAR_FILE"
+}
+
+# ── Deploy WAR ────────────────────────────────────────────────────────────────
+deploy_war() {
+    local war_path="$SCRIPT_DIR/backend/$WAR_FILE"
+    if "$ASADMIN" list-applications 2>/dev/null | grep -q "$APP_NAME"; then
+        log "Redeploying '$APP_NAME'..."
+        "$ASADMIN" redeploy --name "$APP_NAME" --contextroot "$APP_NAME" "$war_path" \
+            || err "Redeployment failed. Check Payara logs:
+   $PAYARA_HOME/glassfish/domains/domain1/logs/server.log"
+    else
+        log "Deploying '$APP_NAME' for the first time..."
+        "$ASADMIN" deploy --name "$APP_NAME" --contextroot "$APP_NAME" "$war_path" \
+            || err "Deployment failed. Check Payara logs:
+   $PAYARA_HOME/glassfish/domains/domain1/logs/server.log"
+    fi
+    ok "Application deployed"
+}
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+start_frontend() {
+    if port_open "$FRONTEND_PORT"; then
+        ok "Frontend already running on port $FRONTEND_PORT"
+        return
+    fi
+
+    log "Starting frontend on port $FRONTEND_PORT..."
+    cd "$SCRIPT_DIR/frontend"
+
+    if [ ! -d "node_modules" ]; then
+        log "Installing npm dependencies (first run — this may take a minute)..."
+        npm install \
+            || err "npm install failed. Make sure Node.js and npm are installed correctly."
+        ok "npm dependencies installed"
+    fi
+
+    # Port 80 requires sudo on Linux — detect and handle gracefully
+    if [ "$FRONTEND_PORT" -lt 1024 ] && [ "$(id -u)" -ne 0 ]; then
+        warn "Port $FRONTEND_PORT is below 1024 — on Linux this requires root.
+   Starting with sudo. You may be prompted for your password."
+        VITE_API_URL="${VITE_API_URL:-http://localhost:8080}" \
+            sudo -E npx vite --port "$FRONTEND_PORT" --host 0.0.0.0 > /tmp/frontend.log 2>&1 &
+    else
+        VITE_API_URL="${VITE_API_URL:-http://localhost:8080}" \
+            npx vite --port "$FRONTEND_PORT" --host 0.0.0.0 > /tmp/frontend.log 2>&1 &
+    fi
+
+    # Wait until the port is open (max 20s)
+    local attempts=0
+    while ! port_open "$FRONTEND_PORT"; do
+        attempts=$((attempts + 1))
+        [ $attempts -ge 10 ] && err "Frontend did not start on port $FRONTEND_PORT.
+   Check logs: cat /tmp/frontend.log"
+        sleep 2
+    done
+    ok "Frontend started on port $FRONTEND_PORT"
+}
+
+stop_frontend() {
+    log "Stopping frontend..."
+    pkill -f "vite.*--port $FRONTEND_PORT" 2>/dev/null \
+        || pkill -f "npm run dev" 2>/dev/null \
+        || warn "Frontend was not running"
+}
+
+# ── Status ────────────────────────────────────────────────────────────────────
+cmd_status() {
+    load_env; setup_vars
+    sep
+    echo -e "${BOLD}  OnlineShop — Service Status${RESET}"
+    sep
+    port_open "${POSTGRES_PORT:-5432}" \
+        && echo -e "  ${GREEN}✔${RESET}  PostgreSQL   localhost:${POSTGRES_PORT:-5432}" \
+        || echo -e "  ${RED}✖${RESET}  PostgreSQL   not running"
+
+    port_open "$ADMIN_PORT" \
+        && echo -e "  ${GREEN}✔${RESET}  Payara       http://localhost:$ADMIN_PORT (admin)" \
+        || echo -e "  ${RED}✖${RESET}  Payara       not running"
+
+    port_open "${BACKEND_PORT:-8080}" \
+        && echo -e "  ${GREEN}✔${RESET}  Backend      http://localhost:${BACKEND_PORT:-8080}/$APP_NAME" \
+        || echo -e "  ${RED}✖${RESET}  Backend      not running"
+
+    port_open "${FRONTEND_PORT:-80}" \
+        && echo -e "  ${GREEN}✔${RESET}  Frontend     http://localhost:${FRONTEND_PORT:-80}" \
+        || echo -e "  ${RED}✖${RESET}  Frontend     not running"
+    sep
+}
+
+# ── Start all ─────────────────────────────────────────────────────────────────
+cmd_start() {
+    load_env
+    validate_config
+    setup_vars
+
+    sep
+    echo -e "${BOLD}  OnlineShop — Starting all services${RESET}"
+    sep
+
+    start_database
+    start_payara
+    setup_jdbc
+    build_war
+    deploy_war
+    start_frontend
+
+    sep
+    ok "All services running!"
+    echo ""
+    echo -e "  ${BOLD}Frontend       ${RESET}  http://localhost:${FRONTEND_PORT}"
+    echo -e "  ${BOLD}Backend API    ${RESET}  http://localhost:${BACKEND_PORT:-8080}/${APP_NAME}/api"
+    echo -e "  ${BOLD}Payara console ${RESET}  http://localhost:${ADMIN_PORT}"
+    echo -e "  ${BOLD}Database       ${RESET}  localhost:${POSTGRES_PORT}/${POSTGRES_DB}"
+    echo ""
+    echo "  ./server stop      — stop all services"
+    echo "  ./server redeploy  — rebuild backend only"
+    echo "  ./server status    — check what is running"
+    sep
+}
+
+# ── Stop all ──────────────────────────────────────────────────────────────────
+cmd_stop() {
+    load_env
+    setup_vars
+
+    sep
+    echo -e "${BOLD}  OnlineShop — Stopping all services${RESET}"
+    sep
+
+    stop_frontend
+    stop_payara
+    stop_database
+
+    sep
+    ok "All services stopped"
+    sep
+}
+
+# ── Restart ───────────────────────────────────────────────────────────────────
+cmd_restart() {
+    cmd_stop
+    echo ""
+    cmd_start
+}
+
+# ── Redeploy (no restart) ─────────────────────────────────────────────────────
+cmd_redeploy() {
+    load_env
+    validate_config
+    setup_vars
+
+    sep
+    echo -e "${BOLD}  OnlineShop — Rebuilding and redeploying backend${RESET}"
+    sep
+
+    if ! port_open "$ADMIN_PORT"; then
+        err "Payara is not running. Start everything first with:  ./server start"
+    fi
+
+    build_war
+    deploy_war
+
+    sep
+    ok "Backend redeployed — no restart required"
+    sep
+}
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+case "${1:-}" in
+    start)    cmd_start    ;;
+    stop)     cmd_stop     ;;
+    restart)  cmd_restart  ;;
+    redeploy) cmd_redeploy ;;
+    status)   cmd_status   ;;
+    *)
+        echo ""
+        echo -e "${BOLD}Usage:${RESET}  ./server <command>"
+        echo ""
+        echo "  start     Start all services (DB + Payara + backend + frontend)"
+        echo "  stop      Stop all services"
+        echo "  restart   Stop then start everything"
+        echo "  redeploy  Rebuild WAR and redeploy backend (Payara stays up)"
+        echo "  status    Show which services are currently running"
+        echo ""
+        exit 1
+        ;;
+esac
