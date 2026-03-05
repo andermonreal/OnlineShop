@@ -1,89 +1,83 @@
 # OnlineShop — Frontend React
 
-Aplicación de tienda online construida con React + Bootstrap siguiendo arquitectura hexagonal.
+Online store application built with React + Bootstrap following a hexagonal architecture.
 
-## Puesta en marcha
+## Getting Started
 
 ```bash
 npm install
 npm run dev
-```
+The backend must be running at http://localhost:8080
+The Vite proxy redirects /onlineShop/api/ → http://localhost:8080/onlineShop/api/
 
-> El backend debe estar corriendo en `http://localhost:8080`  
-> El proxy Vite redirige `/onlineShop/api/` → `http://localhost:8080/onlineShop/api/`
-
----
-
-## Arquitectura Hexagonal
-
-```
+Hexagonal Architecture
+bash
+Copiar código
 src/
-├── domain/entities/          # Lógica de negocio pura (sin dependencias)
+├── domain/entities/          # Pure business logic (no dependencies)
 │   ├── User.js               # Role: admin | customer
-│   ├── Product.js            # Campos: id, name, price, quantity, description, imageUrl
+│   ├── Product.js            # Fields: id, name, price, quantity, description, imageUrl
 │   └── Order.js              # Status: active | completed | cancelled
 │
-├── application/usecases/     # Casos de uso (orquestan dominio + puertos)
+├── application/usecases/     # Use cases (orchestrate domain + ports)
 │   ├── AuthUseCases.js
 │   ├── ProductUseCases.js
 │   ├── OrderUseCases.js
 │   └── AdminUseCases.js
 │
-├── infrastructure/api/       # Adaptadores de salida (HTTP → backend Java)
+├── infrastructure/api/       # Output adapters (HTTP → Java backend)
 │   ├── ApiClient.js
 │   ├── UserApiAdapter.js
 │   ├── ProductApiAdapter.js
 │   ├── OrderApiAdapter.js
 │   └── AdminApiAdapter.js
 │
-└── presentation/             # Adaptadores de entrada (React)
+└── presentation/             # Input adapters (React)
     ├── context/              # AuthContext, CartContext
     ├── components/           # Navbar, ProductCard, ProtectedRoute
     └── pages/                # Login, Register, Home, Product, Cart, Profile, Admin
-```
+Covered API Endpoints
+Users (/users)
+Method	Endpoint	Purpose
+POST	/users/login	Login
+POST	/users/register	Register new user
+POST	/users/logout	Logout
+GET	/users/role	Get role from token
+POST	/users/{id}/change-password	Change own password
 
-## Endpoints API cubiertos
+Products (/products)
+Method	Endpoint	Purpose
+GET	/products/	Full product catalog
+GET	/products/{id}	Product details
 
-### Usuarios (`/users`)
-| Método | Endpoint | Uso |
-|--------|----------|-----|
-| POST | `/users/login` | Inicio de sesión |
-| POST | `/users/register` | Registro |
-| POST | `/users/logout` | Cerrar sesión |
-| GET | `/users/role` | Obtener rol del token |
-| POST | `/users/{id}/change-password` | Cambiar contraseña propia |
+Order / Cart (/order)
+Method	Endpoint	Purpose
+GET	/order/{userId}	View cart
+POST	/order/{userId}/add	Add product
+DELETE	/order/{userId}/remove/{productId}	Remove product completely
+DELETE	/order/{userId}/remove/{productId}?quantity=X	Reduce product quantity
+DELETE	/order/{userId}/clear	Clear cart
 
-### Productos (`/products`)
-| Método | Endpoint | Uso |
-|--------|----------|-----|
-| GET | `/products/` | Catálogo completo |
-| GET | `/products/{id}` | Detalle de producto |
+Administration (/admin)
+Method	Endpoint	Purpose
+GET	/admin/users	List all users
+DELETE	/admin/{userId}/delUser	Delete user
+GET	/admin/{userId}/changeRol	Change role (admin ↔ customer)
+POST	/admin/{userId}/changePassword	Change user password
+POST	/admin/addProduct	Add product
+DELETE	/admin/{productId}/delProduct	Delete product
 
-### Pedido / Carrito (`/order`)
-| Método | Endpoint | Uso |
-|--------|----------|-----|
-| GET | `/order/{userId}` | Ver carrito |
-| POST | `/order/{userId}/add` | Añadir producto |
-| DELETE | `/order/{userId}/remove/{productId}` | Eliminar producto completo |
-| DELETE | `/order/{userId}/remove/{productId}?quantity=X` | Reducir cantidad |
-| DELETE | `/order/{userId}/clear` | Vaciar carrito |
+Navigation
+/login → Login page (required for everything)
 
-### Administración (`/admin`)
-| Método | Endpoint | Uso |
-|--------|----------|-----|
-| GET | `/admin/users` | Listar todos los usuarios |
-| DELETE | `/admin/{userId}/delUser` | Eliminar usuario |
-| GET | `/admin/{userId}/changeRol` | Cambiar rol (admin ↔ customer) |
-| POST | `/admin/{userId}/changePassword` | Cambiar contraseña de usuario |
-| POST | `/admin/addProduct` | Añadir producto |
-| DELETE | `/admin/{productId}/delProduct` | Eliminar producto |
+/register → User registration
 
-## Navegación
+/ → Product catalog (requires login)
 
-- `/login` → Inicio de sesión (requerido para todo)
-- `/register` → Registro
-- `/` → Catálogo de productos (requiere login)
-- `/product/:id` → Detalle de producto
-- `/cart` → Carrito de compra
-- `/profile` → Mi cuenta + cambio de contraseña
-- `/admin` → Panel de administración (solo rol `admin`)
+/product/:id → Product detail page
+
+/cart → Shopping cart
+
+/profile → My account + change password
+
+/admin → Administration panel (admin role only)
