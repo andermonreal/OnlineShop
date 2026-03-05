@@ -2,12 +2,14 @@ package psc.pscShop.service;
 
 import jakarta.ejb.Stateless;
 import jakarta.inject.Inject;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 import psc.pscShop.dao.ProductDAO;
 import psc.pscShop.dto.ProductCreateRequest;
+import psc.pscShop.dto.ProductUpdateRequest;
 import psc.pscShop.dto.ProductDTO;
 import psc.pscShop.entity.Product;
 
@@ -68,6 +70,31 @@ public class ProductService
         } catch (Exception e) {
             return false;
         }
+    }
+    
+    public ProductDTO updateProduct(int productId, ProductUpdateRequest request) {
+        Optional<Product> optional = productDAO.findById(productId);
+        if (optional.isEmpty()) {
+            return null;
+        }
+        Product product = optional.get();
+
+        if (request.getPrice() != null) {
+            if (request.getPrice().compareTo(BigDecimal.ZERO) <= 0)
+                throw new IllegalArgumentException("Price must be greater than 0");
+            product.setPrice(request.getPrice());
+        }
+        if (request.getQuantity() != null) {
+            if (request.getQuantity() < 0)
+                throw new IllegalArgumentException("Stock cannot be negative");
+            product.setQuantity(request.getQuantity());
+        }
+        if (request.getDescription() != null) {
+            product.setDescription(request.getDescription());
+        }
+
+        Product saved = productDAO.update(product);
+        return convertToDTO(saved);
     }
     
 

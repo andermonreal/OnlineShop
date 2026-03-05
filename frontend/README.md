@@ -1,70 +1,89 @@
-# Getting Started with Create React App
+# OnlineShop — Frontend React
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Aplicación de tienda online construida con React + Bootstrap siguiendo arquitectura hexagonal.
 
-## Available Scripts
+## Puesta en marcha
 
-In the project directory, you can run:
+```bash
+npm install
+npm run dev
+```
 
-### `npm start`
+> El backend debe estar corriendo en `http://localhost:8080`  
+> El proxy Vite redirige `/onlineShop/api/` → `http://localhost:8080/onlineShop/api/`
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+---
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Arquitectura Hexagonal
 
-### `npm test`
+```
+src/
+├── domain/entities/          # Lógica de negocio pura (sin dependencias)
+│   ├── User.js               # Role: admin | customer
+│   ├── Product.js            # Campos: id, name, price, quantity, description, imageUrl
+│   └── Order.js              # Status: active | completed | cancelled
+│
+├── application/usecases/     # Casos de uso (orquestan dominio + puertos)
+│   ├── AuthUseCases.js
+│   ├── ProductUseCases.js
+│   ├── OrderUseCases.js
+│   └── AdminUseCases.js
+│
+├── infrastructure/api/       # Adaptadores de salida (HTTP → backend Java)
+│   ├── ApiClient.js
+│   ├── UserApiAdapter.js
+│   ├── ProductApiAdapter.js
+│   ├── OrderApiAdapter.js
+│   └── AdminApiAdapter.js
+│
+└── presentation/             # Adaptadores de entrada (React)
+    ├── context/              # AuthContext, CartContext
+    ├── components/           # Navbar, ProductCard, ProtectedRoute
+    └── pages/                # Login, Register, Home, Product, Cart, Profile, Admin
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Endpoints API cubiertos
 
-### `npm run build`
+### Usuarios (`/users`)
+| Método | Endpoint | Uso |
+|--------|----------|-----|
+| POST | `/users/login` | Inicio de sesión |
+| POST | `/users/register` | Registro |
+| POST | `/users/logout` | Cerrar sesión |
+| GET | `/users/role` | Obtener rol del token |
+| POST | `/users/{id}/change-password` | Cambiar contraseña propia |
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+### Productos (`/products`)
+| Método | Endpoint | Uso |
+|--------|----------|-----|
+| GET | `/products/` | Catálogo completo |
+| GET | `/products/{id}` | Detalle de producto |
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Pedido / Carrito (`/order`)
+| Método | Endpoint | Uso |
+|--------|----------|-----|
+| GET | `/order/{userId}` | Ver carrito |
+| POST | `/order/{userId}/add` | Añadir producto |
+| DELETE | `/order/{userId}/remove/{productId}` | Eliminar producto completo |
+| DELETE | `/order/{userId}/remove/{productId}?quantity=X` | Reducir cantidad |
+| DELETE | `/order/{userId}/clear` | Vaciar carrito |
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+### Administración (`/admin`)
+| Método | Endpoint | Uso |
+|--------|----------|-----|
+| GET | `/admin/users` | Listar todos los usuarios |
+| DELETE | `/admin/{userId}/delUser` | Eliminar usuario |
+| GET | `/admin/{userId}/changeRol` | Cambiar rol (admin ↔ customer) |
+| POST | `/admin/{userId}/changePassword` | Cambiar contraseña de usuario |
+| POST | `/admin/addProduct` | Añadir producto |
+| DELETE | `/admin/{productId}/delProduct` | Eliminar producto |
 
-### `npm run eject`
+## Navegación
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+- `/login` → Inicio de sesión (requerido para todo)
+- `/register` → Registro
+- `/` → Catálogo de productos (requiere login)
+- `/product/:id` → Detalle de producto
+- `/cart` → Carrito de compra
+- `/profile` → Mi cuenta + cambio de contraseña
+- `/admin` → Panel de administración (solo rol `admin`)

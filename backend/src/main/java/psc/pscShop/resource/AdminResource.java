@@ -2,12 +2,15 @@ package psc.pscShop.resource;
 
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.util.List;
 import java.util.Map;
 import psc.pscShop.config.JwtUtil;
 import psc.pscShop.dto.ChangePasswordRequest;
 import psc.pscShop.dto.ProductCreateRequest;
+import psc.pscShop.dto.ProductDTO;
+import psc.pscShop.dto.ProductUpdateRequest;
 import psc.pscShop.dto.UserDTO;
 import psc.pscShop.entity.Product;
 import psc.pscShop.service.AdminService;
@@ -121,6 +124,38 @@ public class AdminResource
             }
         } catch (Exception e) {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("Failed to delete product").build();
+        }
+    }
+    
+    @PUT
+    @Path("/{productId}/updateProduct")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response updateProduct(
+            @HeaderParam("Authorization") String authHeader,
+            @PathParam("productId") int productId,
+            ProductUpdateRequest request)
+    {
+        Response authResponse = validateAdmin(authHeader);
+        if (authResponse != null) return authResponse;
+
+        try {
+            // ✔ devuelve ProductDTO, no Product entity
+            ProductDTO updated = productService.updateProduct(productId, request);
+            if (updated == null) {
+                return Response.status(Response.Status.NOT_FOUND)
+                               .entity("{\"error\":\"Product not found\"}")
+                               .build();
+            }
+            return Response.ok(updated).build();
+        } catch (IllegalArgumentException e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                           .entity("{\"error\":\"" + e.getMessage() + "\"}")
+                           .build();
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                           .entity("{\"error\":\"" + e.getMessage() + "\"}")
+                           .build();
         }
     }
     

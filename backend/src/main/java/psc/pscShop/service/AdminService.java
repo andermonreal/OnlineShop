@@ -48,7 +48,8 @@ public class AdminService
         User user = userDAO.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         
-        if (user.getRole().name() == "admin")
+        
+        if (user.getRole() == User.Role.admin)
             user.setRole(User.Role.customer);
         else
             user.setRole(User.Role.admin);
