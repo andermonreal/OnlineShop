@@ -4,6 +4,77 @@ A full-stack e-commerce web application built with a Java EE backend (JAX-RS + J
 
 ---
 
+## Getting Started
+
+### 1. Clone and configure
+
+```bash
+git clone <repository-url>
+cd onlineshop
+cp .env.example .env
+# Edit .env — set PAYARA_HOME to your Payara installation path
+```
+
+### 2. Make the server script executable
+
+```bash
+chmod +x server
+```
+
+### 3. Start everything
+
+```bash
+./server start
+```
+
+Make sure **Docker Desktop** is running and **PostgreSQL is stoped**.
+
+The script will automatically:
+1. Start PostgreSQL in Docker
+2. Start Payara Server
+3. Create the JDBC connection pool and resource (first run only)
+4. Build the backend WAR with Maven
+5. Deploy the WAR to Payara
+6. Start the React frontend
+ 
+
+When done you will see:
+
+```
+✔  All services running!
+
+  Frontend        http://localhost:80
+  Backend API     http://localhost:8080/onlineShop/api
+  Payara console  http://localhost:4848
+  Database        localhost:5432/pscShop
+```
+
+### 4. Open the app
+
+Navigate to **http://localhost** in your browser. You will be redirected to the login page. Register an account to get started.
+
+---
+
+## Daily Development Workflow
+
+```bash
+# Start all services
+./server start
+
+# Check what is running
+./server status
+
+# After changing backend Java code — rebuild and redeploy without restarting Payara
+./server redeploy
+
+# Restart everything (e.g. after changing .env)
+./server restart
+
+# Stop all services when done
+./server stop
+
+---
+
 ## Table of Contents
 
 - [Architecture](#architecture)
@@ -171,71 +242,7 @@ NODE_ENV=development
 
 ---
 
-## Getting Started
 
-### 1. Clone and configure
-
-```bash
-git clone <repository-url>
-cd onlineshop
-cp .env.example .env
-# Edit .env — set PAYARA_HOME to your Payara installation path
-```
-
-### 2. Make the server script executable
-
-```bash
-chmod +x server
-```
-
-### 3. Start everything
-
-```bash
-./server start
-```
-
-The script will automatically:
-1. Start PostgreSQL in Docker
-2. Start Payara Server
-3. Create the JDBC connection pool and resource (first run only)
-4. Build the backend WAR with Maven
-5. Deploy the WAR to Payara
-6. Start the React frontend
-
-When done you will see:
-
-```
-✔  All services running!
-
-  Frontend        http://localhost:80
-  Backend API     http://localhost:8080/onlineShop/api
-  Payara console  http://localhost:4848
-  Database        localhost:5432/pscShop
-```
-
-### 4. Open the app
-
-Navigate to **http://localhost** in your browser. You will be redirected to the login page. Register an account to get started.
-
----
-
-## Daily Development Workflow
-
-```bash
-# Start all services
-./server start
-
-# Check what is running
-./server status
-
-# After changing backend Java code — rebuild and redeploy without restarting Payara
-./server redeploy
-
-# Restart everything (e.g. after changing .env)
-./server restart
-
-# Stop all services when done
-./server stop
 ```
 
 ### Frontend hot-reload

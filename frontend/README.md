@@ -1,5 +1,3 @@
-enes listo para copiar directamente como archivo .md:
-
 # OnlineShop — Frontend React
 
 Online store application built with React + Bootstrap following a hexagonal architecture.
